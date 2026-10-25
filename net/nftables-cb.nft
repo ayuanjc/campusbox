@@ -1,0 +1,49 @@
+#!/usr/sbin/nft -f
+# CampusBox 分流与劫持规则（v0.2：双接口 + 有线上行）
+# 铁律 2：校园网网段 return —— 无论从 usb0（PC）还是 wlan1（AP 客户端）进来。
+#         一旦 Portal 认证流量被代理吃掉，全网瘫。这是本项目最容易复发的 bug。
+
+table ip cb
+delete table ip cb
+
+define CLI_IFS = { "usb0", "wlan1" }     # 被代理的客户端接口（PC / AP 下的手机）
+define UP_IFS  = { "eth0", "wlan0" }     # 上行接口（有线优先 / 校园 WiFi）
+define LAN     = { 172.32.0.0/16, 10.0.0.0/8, 192.168.0.0/16, 127.0.0.0/8 }
+
+table ip cb {
+  chain dns {
+    type nat hook prerouting priority dstnat; policy accept;
+    # 客户端所有 53 流量劫持到 mihomo 的 dns（fake-ip），否则分流规则失效
+    iifname $CLI_IFS udp dport 53 redirect to :1053
+    iifname $CLI_IFS tcp dport 53 redirect to :1053
+  }
+
+  chain pre {
+    type filter hook prerouting priority mangle; policy accept;
+
+    # --- 必须直连（铁律 2）---
+    iifname $CLI_IFS ip daddr $LAN return
+    # 校园 Portal 的宿主机名/域名解析也不能进代理
+
+    # --- 其余透明代理 ---
+    iifname $CLI_IFS meta l4proto { tcp, udp } tproxy to :7893 meta mark set 1
+  }
+
+  chain fwd {
+    type filter hook forward priority filter; policy accept;
+    # 客户端 → 上行（任一组合都放行）
+    iifname $CLI_IFS oifname $UP_IFS accept
+    # 回程
+    iifname $UP_IFS oifname $CLI_IFS ct state established,related accept
+    # 上行切换瞬间的旧连接：放行已建立，避免切换时全断
+    iifname $UP_IFS oifname $UP_IFS ct state established,related accept
+  }
+}
+
+table ip nat {
+  chain post {
+    type nat hook postrouting priority srcnat; policy accept;
+    # 有线和 WiFi 都要 masquerade；不写死在 wlan0 上，否则切到 eth0 就断
+    oifname $UP_IFS masquerade
+  }
+}

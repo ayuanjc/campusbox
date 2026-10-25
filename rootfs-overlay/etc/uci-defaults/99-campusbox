@@ -1,17 +1,37 @@
 #!/bin/sh
-# 首启只跑一次：把 overlay 文件铺到位、生成首份配置、然后自删。
+# 首启只跑一次：把 /etc/cb 下所有运行脚本铺到位、生成首份配置、然后自删。
+# v0.2：脚本清单改为「全量铺 /rom/etc/cb/*」，不再逐个列举——
+#       v0.1 那种写法每次加脚本都要改这里，漏改就静默少一个文件。
 CB=/etc/cb
-mkdir -p $CB /data/logs /run/cb
+mkdir -p $CB /data/logs /run/cb /run/cb/ap
 
-[ -f $CB/config.tmpl.yaml ] || cp /rom$CB/config.tmpl.yaml $CB/ 2>/dev/null || true
-for f in gadget-ncm.sh gen-config.sh balance.sh campus-auth.sh portal-probe.sh \
-         dnsmasq-usb0.conf nftables-usb0.nft tproxy-up.sh tproxy-down.sh; do
-    [ -f $CB/$f ] || cp /rom$CB/$f $CB/ 2>/dev/null || true
-done
-chmod +x $CB/*.sh
+if [ -d /rom$CB ]; then
+    for f in /rom$CB/*; do
+        [ -f "$f" ] || continue
+        b=$(basename "$f")
+        [ -f "$CB/$b" ] || cp "$f" "$CB/$b" 2>/dev/null || true
+    done
+fi
+chmod +x $CB/*.sh 2>/dev/null || true
 
 # 写硬件标识（软件靠它判断能力位，见 docs/INTERFACE-CONTRACT.md）
-uci -q get campusbox.usb.serial >/dev/null || uci set campusbox.usb.serial="CB01-F0-00000000"
+uci -q get campusbox.usb.serial >/dev/null || uci set campusbox.usb.serial="CB02-C0-00000000"
+
+# v0.2 默认值：有线优先、AP 关闭（首次开箱不折腾用户）
+uci set campusbox.uplink.prefer_wired=1
+uci -q get campusbox.ap.enable >/dev/null || uci set campusbox.ap.enable=0
 uci commit campusbox
+
+# 日志轮转：每天掉线 5 次的环境，日志一月能到 90MB，必须截断
+cat > /etc/logrotate.d/campusbox <<'EOF'
+/data/logs/cb.log {
+    size 5M
+    rotate 3
+    compress
+    missingok
+    notifempty
+    copytruncate
+}
+EOF
 
 exit 0

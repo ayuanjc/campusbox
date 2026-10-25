@@ -1,32 +1,47 @@
 #!/bin/sh
-# 启动顺序：gadget → dnsmasq → nft/tproxy → mihomo → 上游 → portal 探活
-# 每一步独立兜底：前一步失败不阻断后面的自愈循环。
+# CampusBox 全链路启动（v0.2）
+#
+# 顺序不能乱，两个硬依赖：
+#   1) gadget 必须早于 dnsmasq —— usb0 不存在时 dnsmasq bind-dynamic 会失败并退出
+#   2) nft 必须早于 mihomo —— 否则 mihomo 起来时 tproxy 端口无人接收，首批连接全超时
+# 每步独立兜底：前一步失败不阻断后面的自愈循环（宁可半残也不要整机黑）。
 CB=/etc/cb
 LOG=/data/logs/cb.log
 mkdir -p /run/cb /data/logs
 
 log() { echo "$(date '+%F %T') $*" >> $LOG; }
 
-log "== boot =="
-sh $CB/gen-config.sh >> $LOG 2>&1 || log "gen-config failed"
+log "== boot v0.2 =="
 
+# 1. USB 网卡（CDC-NCM）
 sh $CB/gadget-ncm.sh >> $LOG 2>&1 || log "gadget failed"
+sleep 1
 
-dnsmasq --conf-file=$CB/dnsmasq-usb0.conf >> $LOG 2>&1 || log "dnsmasq failed"
+# 2. DHCP（usb0）
+dnsmasq --conf-file=$CB/dnsmasq-usb0.conf >> $LOG 2>&1 || log "dnsmasq usb0 failed"
 
+# 3. 分流规则 + 策略路由
 sh $CB/tproxy-up.sh >> $LOG 2>&1 || log "nft failed"
 
+# 4. 代理内核
 mihomo -d $CB >> $LOG 2>&1 &
 sleep 2
 
-# 上行：先连校园 WiFi（凭据来自 uci）
-. /lib/functions.sh
-SSID=$(uci -q get campusbox.uplink.ssid)
-if [ -n "$SSID" ]; then
-  wpa_cli -i wlan0 add_network >/dev/null 2>&1 || true
-  log "uplink ssid=$SSID"
+# 5. 上行（有线优先 → 校园 WiFi），守护进程
+sh $CB/uplink-watch.sh >> $LOG 2>&1 &
+
+# 6. WiFi 模组分区：STA 用 wlan0；AP 用 wlan1（可选，uci 开关）
+if [ "$(uci -q get campusbox.ap.enable)" = "1" ]; then
+  dnsmasq --conf-file=$CB/dnsmasq-wlan1.conf >> $LOG 2>&1 || log "dnsmasq wlan1 failed"
+  hostapd -B $CB/hostapd.conf >> $LOG 2>&1 || log "hostapd failed"
+  sh $CB/ap-autoclose.sh >> $LOG 2>&1 &
 fi
 
+# 7. 电源管理（VBUS 三档降档）—— 必须在 WiFi 起来之后，否则改 txpower 无对象
+sh $CB/vbus-governor.sh >> $LOG 2>&1 &
+
+# 8. 余额与 Portal 探活
 sh $CB/balance.sh >> $LOG 2>&1 &
 sh $CB/portal-probe.sh >> $LOG 2>&1 &
+
 log "== ready =="

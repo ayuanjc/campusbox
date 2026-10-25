@@ -7,11 +7,23 @@ config portal 'portal'
 
 config uplink 'uplink'
     option ssid 'ZCST-CMCC'
-    option key ''
-    option prefer_wired '0'
+    option psk ''
+    option prefer_wired '1'
 
 config usb 'usb'
     option serial 'CB01-F0-00000000'
+
+config ap 'ap'
+    option enable '0'
+    option ssid 'CampusBox'
+    option password 'changeme-please'
+    option idle_minutes '10'
+    option max_clients '8'
+
+config power 'power'
+    option adc_path '/sys/bus/iio/devices/iio:device0/in_voltage0_raw'
+    option adc_ref_mv '1800'
+    option adc_full '4095'
 
 config mihomo 'mihomo'
     option mix_port '7891'
