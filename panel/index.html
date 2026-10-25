@@ -1,0 +1,43 @@
+<!doctype html>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CampusBox</title>
+<style>
+:root{color-scheme:dark}
+body{margin:0;font:14px/1.5 system-ui;background:#0d1117;color:#e6edf3;padding:20px;max-width:520px}
+h1{font-size:18px;margin:0 0 16px}
+.card{border:1px solid #30363d;border-radius:10px;padding:14px;margin-bottom:12px}
+.k{color:#8b949e;font-size:12px}
+.bar{height:10px;background:#21262d;border-radius:5px;overflow:hidden;margin:8px 0}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,#3fb950,#2ea043)}
+b{font-size:20px}
+</style>
+<h1>CampusBox</h1>
+<div class="card">
+  <div class="k">状态</div><b id="link">…</b>
+</div>
+<div class="card">
+  <div class="k">流量余额</div>
+  <div class="bar"><i id="bar" style="width:0%"></i></div>
+  <div><span id="left">–</span> <span class="k" id="tot"></span></div>
+</div>
+<div class="card">
+  <div class="k">设备</div><div id="dev" class="k">…</div>
+</div>
+<script>
+const gb = n => (n/1073741824).toFixed(1)+' GB';
+async function tick(){
+  try{
+    const s = await (await fetch('/api/state')).json();
+    document.getElementById('link').textContent = s.link === 'online' ? '在线' : '离线';
+    const b = s.balance || {};
+    if (b.total) {
+      document.getElementById('left').textContent = gb(b.left);
+      document.getElementById('tot').textContent = '/ 共 ' + gb(b.total);
+      document.getElementById('bar').style.width = (100*b.left/b.total).toFixed(1)+'%';
+    }
+    document.getElementById('dev').textContent =
+      'SN ' + (s.serial||'?') + ' · usb0 ' + (s.usb0?'up':'down') + ' · mihomo ' + (s.mihomo?'ok':'down');
+  }catch(e){ document.getElementById('link').textContent = '面板未连上'; }
+}
+tick(); setInterval(tick, 3000);
+</script>

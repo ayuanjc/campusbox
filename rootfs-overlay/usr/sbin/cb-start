@@ -1,0 +1,32 @@
+#!/bin/sh
+# 启动顺序：gadget → dnsmasq → nft/tproxy → mihomo → 上游 → portal 探活
+# 每一步独立兜底：前一步失败不阻断后面的自愈循环。
+CB=/etc/cb
+LOG=/data/logs/cb.log
+mkdir -p /run/cb /data/logs
+
+log() { echo "$(date '+%F %T') $*" >> $LOG; }
+
+log "== boot =="
+sh $CB/gen-config.sh >> $LOG 2>&1 || log "gen-config failed"
+
+sh $CB/gadget-ncm.sh >> $LOG 2>&1 || log "gadget failed"
+
+dnsmasq --conf-file=$CB/dnsmasq-usb0.conf >> $LOG 2>&1 || log "dnsmasq failed"
+
+sh $CB/tproxy-up.sh >> $LOG 2>&1 || log "nft failed"
+
+mihomo -d $CB >> $LOG 2>&1 &
+sleep 2
+
+# 上行：先连校园 WiFi（凭据来自 uci）
+. /lib/functions.sh
+SSID=$(uci -q get campusbox.uplink.ssid)
+if [ -n "$SSID" ]; then
+  wpa_cli -i wlan0 add_network >/dev/null 2>&1 || true
+  log "uplink ssid=$SSID"
+fi
+
+sh $CB/balance.sh >> $LOG 2>&1 &
+sh $CB/portal-probe.sh >> $LOG 2>&1 &
+log "== ready =="

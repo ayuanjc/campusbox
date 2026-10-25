@@ -1,0 +1,64 @@
+# CampusBox mihomo 模板 —— gen-config.sh 会替换 @@SUBS@@ / @@PORTS@@
+mixed-port: 7891
+allow-lan: true
+bind-address: "*"
+mode: rule
+log-level: warning
+external-controller: 127.0.0.1:9090
+secret: "@@SECRET@@"
+
+tproxy-port: 7893
+
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    # 校园网与认证域名必须真解析，否则 Portal 走不通
+    - "*.zsc.edu.cn"
+    - "172.32.253.17"
+    - "*.msftconnecttest.com"
+    - "*.msftncsi.com"
+    - "localhost.ptlogin2.qq.com"
+  nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  fallback:
+    - https://1.1.1.1/dns-query
+
+proxies: []
+
+proxy-providers:
+@@SUBS@@
+
+proxy-groups:
+  # 单一 url-test 组 use 全部 provider：耗尽/故障自动跳过，无需自写记账
+  - name: "自动选择"
+    type: url-test
+    use: ["sub1","sub2","sub3","sub4","sub5","sub6"]
+    url: "http://www.gstatic.com/generate_204"
+    interval: 300
+    tolerance: 50
+
+  # AI 组：探真实端点，排除香港（香港节点对端按出口 IP 断 TLS）
+  - name: "AI"
+    type: url-test
+    use: ["sub1","sub2","sub3","sub4","sub5","sub6"]
+    url: "https://api.openai.com/v1/models"
+    interval: 600
+    filter: "(?i)^(?!.*(香港|HK|Hong)).*$"
+
+  - name: "直连"
+    type: select
+    proxies: ["DIRECT"]
+
+rules:
+  - DOMAIN-SUFFIX,openai.com,AI
+  - DOMAIN-SUFFIX,chatgpt.com,AI
+  - DOMAIN-SUFFIX,anthropic.com,AI
+  - DOMAIN-SUFFIX,claude.ai,AI
+  - IP-CIDR,172.32.0.0/16,DIRECT,no-resolve
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - GEOIP,CN,DIRECT
+  - MATCH,自动选择

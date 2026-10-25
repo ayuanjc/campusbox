@@ -1,0 +1,17 @@
+#!/bin/sh
+# 首启只跑一次：把 overlay 文件铺到位、生成首份配置、然后自删。
+CB=/etc/cb
+mkdir -p $CB /data/logs /run/cb
+
+[ -f $CB/config.tmpl.yaml ] || cp /rom$CB/config.tmpl.yaml $CB/ 2>/dev/null || true
+for f in gadget-ncm.sh gen-config.sh balance.sh campus-auth.sh portal-probe.sh \
+         dnsmasq-usb0.conf nftables-usb0.nft tproxy-up.sh tproxy-down.sh; do
+    [ -f $CB/$f ] || cp /rom$CB/$f $CB/ 2>/dev/null || true
+done
+chmod +x $CB/*.sh
+
+# 写硬件标识（软件靠它判断能力位，见 docs/INTERFACE-CONTRACT.md）
+uci -q get campusbox.usb.serial >/dev/null || uci set campusbox.usb.serial="CB01-F0-00000000"
+uci commit campusbox
+
+exit 0

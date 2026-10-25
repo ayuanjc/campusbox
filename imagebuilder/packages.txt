@@ -1,0 +1,13 @@
+# 平台无关的核心包（rockchip 平台相关包名以 imagebuilder 的 PROFILE 为准）
+dnsmasq-full
+nftables
+kmod-nft-tproxy
+kmod-nft-nat
+kmod-usb-gadget
+kmod-usb-gadget-ncm
+kmod-usb-gadget-rndis
+wpad-basic-mbedtls
+iw
+curl
+ca-bundle
+jshn

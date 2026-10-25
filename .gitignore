@@ -1,0 +1,8 @@
+build/
+*.img
+*.img.gz
+*.bin
+.cache/
+secrets/
+*.log
+state.json

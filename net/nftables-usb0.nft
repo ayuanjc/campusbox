@@ -1,0 +1,36 @@
+#!/usr/sbin/nft -f
+# CampusBox 分流与劫持规则
+# 铁律 2：校园网网段 return，否则 Portal 认证流量被代理吃掉，全网瘫。
+
+table ip cb
+delete table ip cb
+
+table ip cb {
+  chain dns {
+    type nat hook prerouting priority dstnat; policy accept;
+    iifname "usb0" udp dport 53 redirect to :1053
+    iifname "usb0" tcp dport 53 redirect to :1053
+  }
+
+  chain pre {
+    type filter hook prerouting priority mangle; policy accept;
+    # --- 必须直连：校园网、私网、认证服务器 ---
+    iifname "usb0" ip daddr { 172.32.0.0/16, 10.0.0.0/8, 192.168.0.0/16, 127.0.0.0/8 } return
+    # --- 其余透明代理 ---
+    iifname "usb0" ip protocol tcp tproxy to :7893 meta mark set 1
+    iifname "usb0" ip protocol udp tproxy to :7893 meta mark set 1
+  }
+
+  chain fwd {
+    type filter hook forward priority filter; policy accept;
+    iifname "usb0" oifname "wlan0" accept
+    iifname "wlan0" oifname "usb0" ct state established,related accept
+  }
+}
+
+table ip nat {
+  chain post {
+    type nat hook postrouting priority srcnat; policy accept;
+    oifname "wlan0" masquerade
+  }
+}
