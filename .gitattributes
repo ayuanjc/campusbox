@@ -1,0 +1,13 @@
+# OpenWrt 设备上执行的文件必须是 LF —— CRLF 会让 #!/bin/sh 变成 "not found"
+* text=auto eol=lf
+
+*.sh    text eol=lf
+*.nft   text eol=lf
+*.conf  text eol=lf
+*.cgi   text eol=lf
+*.md    text eol=lf
+Makefile text eol=lf
+
+*.img.gz binary
+*.png binary
+*.jpg binary
